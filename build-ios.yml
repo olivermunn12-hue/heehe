@@ -1,0 +1,55 @@
+name: Build Legacy iOS Store (iPhone)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build for physical iOS devices (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project LegacyiOSStoreiPhone.xcodeproj \
+            -scheme LegacyiOSStoreiPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/LegacyStoreBuild" \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Package unsigned IPA for jailbreak/TrollStore testing
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/LegacyStoreBuild/Build/Products/Release-iphoneos/LegacyiOSStoreiPhone.app"
+          test -d "$APP"
+          mkdir -p "$RUNNER_TEMP/package/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/package/Payload/"
+          (cd "$RUNNER_TEMP/package" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/LegacyiOSStore-iOS16-unsigned.ipa" Payload)
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$GITHUB_WORKSPACE/LegacyiOSStore-iOS16-app.zip"
+
+      - name: Upload build outputs and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LegacyiOSStore-iPhone-build
+          path: |
+            LegacyiOSStore-iOS16-unsigned.ipa
+            LegacyiOSStore-iOS16-app.zip
+            ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: warn
+          retention-days: 14
