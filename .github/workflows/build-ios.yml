@@ -1,0 +1,46 @@
+
+name: Build Legacy iOS Store (iPhone)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show project files
+        run: ls -la
+
+      - name: Locate Xcode project
+        run: |
+          find . -maxdepth 4 \( -name "*.xcodeproj" -o -name "*.xcworkspace" \)
+
+      - name: Build iOS app
+        run: |
+          xcodebuild \
+            -project LegacyiOSStoreiPhone.xcodeproj \
+            -scheme LegacyiOSStoreiPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package app
+        run: |
+          mkdir -p output
+          cp -R build/Build/Products/Release-iphoneos/*.app output/
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: LegacyiOSStore-iPhone-build
+          path: output/
+          if-no-files-found: error
