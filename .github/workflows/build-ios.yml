@@ -15,32 +15,48 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show project files
-        run: ls -la
-
-      - name: Locate Xcode project
+      - name: Inspect repository
         run: |
-          find . -maxdepth 4 \( -name "*.xcodeproj" -o -name "*.xcworkspace" \)
+          echo "Files in repository:"
+          find . -maxdepth 5 -print
+          echo "Searching for Xcode projects:"
+          find . \( -name "*.xcodeproj" -o -name "*.xcworkspace" \) -print
 
-      - name: Build iOS app
+      - name: Find project and build
+        shell: bash
         run: |
+          set -euo pipefail
+
+          PROJECT=$(find . -name "*.xcodeproj" -type d -print -quit)
+
+          if [ -z "$PROJECT" ]; then
+            echo "::error::No .xcodeproj folder found. The project must be uploaded to GitHub."
+            exit 1
+          fi
+
+          echo "Found project: $PROJECT"
+
+          xcodebuild -list -project "$PROJECT"
+
+          SCHEME=$(xcodebuild -list -json -project "$PROJECT" |
+            python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["project"]["schemes"][0])')
+
+          echo "Building scheme: $SCHEME"
+
           xcodebuild \
-            -project LegacyiOSStoreiPhone.xcodeproj \
-            -scheme LegacyiOSStoreiPhone \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Package app
-        run: |
-          mkdir -p output
-          cp -R build/Build/Products/Release-iphoneos/*.app output/
-
-      - name: Upload app
+      - name: Upload build output
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: LegacyiOSStore-iPhone-build
-          path: output/
-          if-no-files-found: error
+          name: Build-logs
+          path: |
+            build/Logs/**
+          if-no-files-found: ignore
